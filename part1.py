@@ -33,6 +33,7 @@ sc = spark.sparkContext
 
 # Additional imports
 import pytest
+import random
 
 """
 ===== Questions 1-3: Generalized Map and Reduce =====
@@ -62,18 +63,21 @@ If you have done it correctly, the following test should pass.
 Don't change the q1() answer. It should fill out automatically.
 """
 
+"""
+export PYSPARK_PYTHON="C:/Users/Iaine/.vscode/PYTHON~1/ecs119-hw/119-hw2/.venv310/Scripts/python.exe"
+export PYSPARK_DRIVER_PYTHON="C:/Users/Iaine/.vscode/PYTHON~1/ecs119-hw/119-hw2/.venv310/Scripts/python.exe"
+"""
+
 def general_map(rdd, f):
     """
     rdd: an RDD with values of type (k1, v1)
     f: a function (k1, v1) -> List[(k2, v2)]
     output: an RDD with values of type (k2, v2)
     """
-    # TODO
-    raise NotImplementedError
-    # ^^^^ remove TODO and raise NotImplementedError when implemented :)
+    return rdd.flatMap(lambda pair: f(pair[0], pair[1]))
 
 # Remove skip when implemented!
-@pytest.mark.skip
+#@pytest.mark.skip
 def test_general_map():
     rdd = sc.parallelize(["cat", "dog", "cow", "zebra"])
 
@@ -117,11 +121,10 @@ def general_reduce(rdd, f):
     output: an RDD with values of type (k2, v2),
         and just one single value per key
     """
-    # TODO
-    raise NotImplementedError
+    return rdd.reduceByKey(f)
 
 # Remove skip when implemented!
-@pytest.mark.skip
+#@pytest.mark.skip
 def test_general_reduce():
     rdd = sc.parallelize(["cat", "dog", "cow", "zebra"])
 
@@ -155,7 +158,9 @@ def q2():
 and keys for Reduce be different might be useful.
 
 === ANSWER Q3 BELOW ===
-
+Maybe in the map phase we have (Last Name, Score in %) for some student data
+and then in the reduce phase we want to group by last name and average the score, 
+and then map each of the last names to their parent's full name (guardian). 
 === END OF Q3 ANSWER ===
 """
 
@@ -171,17 +176,14 @@ set of integers between 1 and 1 million (inclusive).
 """
 
 def load_input():
+
     # Return a parallelized RDD with the integers between 1 and 1,000,000
-    # This will be referred to in the following questions.
-    # TODO
-    raise NotImplementedError
+    return sc.parallelize(range(1, 1000001))
 
 def q4(rdd):
     # Input: the RDD from load_input
+    return rdd.count()
     # Output: the length of the dataset.
-    # You may use general_map or general_reduce here if you like (but you don't have to) to get the total count.
-    # TODO
-    raise NotImplementedError
 
 """
 Now use the general_map and general_reduce functions to answer the following questions.
@@ -191,9 +193,8 @@ Now use the general_map and general_reduce functions to answer the following que
 
 def q5(rdd):
     # Input: the RDD from Q4
+    return rdd.sum() / rdd.count() if rdd.count() > 0 else 0
     # Output: the average value
-    # TODO
-    raise NotImplementedError
 
 """
 6. Among the numbers from 1 to 1 million, when written out,
@@ -210,9 +211,26 @@ Your answer should use the general_map and general_reduce functions as much as p
 
 def q6(rdd):
     # Input: the RDD from Q4
+
+    # Convert to (key, value) pairs so general_map works
+    rdd_pairs = rdd.map(lambda x: (x, x))
+
+    # Map all numbers into single digits
+    digit_counts = general_map(rdd_pairs, lambda _, v: [(d, 1) for d in str(v)])
+
+    # Take totals for each digit
+    digit_totals = general_reduce(digit_counts, lambda a, b: a + b)
+
+    # To list
+    digit_totals_list = digit_totals.collect()
+
+    # Fetch most and least common
+    most_comb = max(digit_totals_list, key=lambda x: x[1])
+    least_comb = min(digit_totals_list, key=lambda x: x[1])
+
+    return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
+
     # Output: a tuple (most common digit, most common frequency, least common digit, least common frequency)
-    # TODO
-    raise NotImplementedError
 
 """
 7. Among the numbers from 1 to 1 million, written out in English, which letter is most common?
@@ -248,12 +266,67 @@ Notes:
 """
 
 # *** Define helper function(s) here ***
+units = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+def under_thousand(num, units, teens, tens):
+    if num == 0:
+        return ""
+    words = []
+    if num >= 100:
+        hundreds = num // 100
+        if 1 <= hundreds < len(units):
+            words += [units[hundreds], "hundred"]
+        num %= 100
+        if num > 0:
+            words.append("and")
+    if num >= 20:
+        words.append(tens[num // 10])
+        num %= 10
+    if 10 <= num < 20:
+        words.append(teens[num - 10])
+    elif 0 < num < 10:
+        words.append(units[num])
+    return " ".join(filter(None, words))
+
+def number_to_english(n, units, teens, tens):
+    if n == 0:
+        return "zero"
+    if n == 1000000:
+        return "one million"
+    result = []
+    thousands = n // 1000
+    remainder = n % 1000
+    if thousands > 0:
+        result.append(under_thousand(thousands, units, teens, tens))
+        result.append("thousand")
+    if remainder > 0 or not result:
+        result.append(under_thousand(remainder, units, teens, tens))
+    return " ".join(result).strip()
 
 def q7(rdd):
     # Input: the RDD from Q4
-    # Output: a tulpe (most common char, most common frequency, least common char, least common frequency)
-    # TODO
-    raise NotImplementedError
+    
+    # Make into (key, value)
+    rdd_pairs = rdd.map(lambda x: (x, x))
+    
+    # Map all numbers into string form, and into indiv. chars
+    char_counts = general_map(rdd_pairs, lambda _, v: [(char, 1) for char in number_to_english(v, units, teens, tens) if char != " "])
+    
+    # Take totals for each char
+    char_totals = general_reduce(char_counts, lambda a, b: a + b)
+
+    # To list
+    char_totals_list = char_totals.collect()
+   
+    # Fetch most and least common
+    most_comb = max(char_totals_list, key=lambda x: x[1])
+    least_comb = min(char_totals_list, key=lambda x: x[1])
+    
+    return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
+
+    # Output: a tuple (most common char, most common frequency, least common char, least common frequency)
 
 """
 8. Does the answer change if we have the numbers from 1 to 100,000,000?
@@ -263,24 +336,16 @@ You will need a new load_input function.
 """
 
 def load_input_bigger():
-    # TODO
-    raise NotImplementedError
+    # Return a parallelized RDD with the integers between 1 and 100,000,000
+    return sc.parallelize(range(1, 100000001))
 
 def q8_a():
-    # version of Q6
-    # It should call into q6() with the new RDD!
-    # Don't re-implemented the q6 logic.
-    # Output: a tuple (most common digit, most common frequency, least common digit, least common frequency)
-    # TODO
-    raise NotImplementedError
+    rdd = load_input_bigger()
+    return q6(rdd)
 
 def q8_b():
-    # version of Q7
-    # It should call into q7() with the new RDD!
-    # Don't re-implemented the q6 logic.
-    # Output: a tulpe (most common char, most common frequency, least common char, least common frequency)
-    # TODO
-    raise NotImplementedError
+    rdd = load_input_bigger()
+    return q7(rdd)
 
 """
 Discussion questions
@@ -288,14 +353,20 @@ Discussion questions
 9. State the values of k1, v1, k2, and v2 for your Q6 and Q7 pipelines.
 
 === ANSWER Q9 BELOW ===
-
+q6: ('1', 600001, '0', 488895)
+q7: ('n', 7141002, 'm', 1)
 === END OF Q9 ANSWER ===
 
 10. Do you think it would be possible to compute the above using only the
 "simplified" MapReduce we saw in class? Why or why not?
 
 === ANSWER Q10 BELOW ===
+If we're talking about the simplified MapReduce that was:
+(input) ---> (map) ---> (reduce)
 
+Then I don't think so, we're using some intermediary functions 
+that are necessary in mapping and reducing, but if we ignore that then
+yes this simplified model would work. 
 === END OF Q10 ANSWER ===
 """
 
@@ -315,9 +386,16 @@ Output a set of (key, value) pairs after the reduce stage.
 
 def q11(rdd):
     # Input: the RDD from Q4
+    rdd_pairs = rdd.map(lambda x: (x, x))
+
+    # Map all numbers to an empty list
+    rdd_map = general_map(rdd_pairs, lambda _, v: [])
+
+    # Reduce the map
+    rdd_reduce = general_reduce(rdd_map, lambda _, v: [])
+
     # Output: the result of the pipeline, a set of (key, value) pairs
-    # TODO
-    raise NotImplementedError
+    return set(rdd_reduce.collect())
 
 """
 12. What happened? Explain below.
@@ -325,7 +403,10 @@ Does this depend on anything specific about how
 we chose to define general_reduce?
 
 === ANSWER Q12 BELOW ===
-
+It returned an empty list, not that I believe,
+because the rdd_map was already empty, so I don't think
+a different definition of general_reduce would've 
+changed anything as it uses the map that was blank.
 === END OF Q12 ANSWER ===
 
 13. Lastly, we will explore a second edge case, where the reduce stage can
@@ -338,7 +419,13 @@ Why do you imagine it could be the case that the output of the reduce stage
 is different depending on the order of the input?
 
 === ANSWER Q13 BELOW ===
-
+Let's say you're running a specific set of order of operations on a list:
+[-1,19,-2,4,7]
+with operations [*,/,-,+]
+where an operation happens between two numbers in
+the list, if we change the order of the numbers in the list, the result should 
+change. Simpler idea is if we subtracted 3 numbers, changing the numbers and running
+a reduce would change the final result.
 === END OF Q13 ANSWER ===
 
 14.
@@ -351,9 +438,11 @@ Important: Please create an example where the output of the reduce stage is a se
 
 def q14(rdd):
     # Input: the RDD from Q4
-    # Output: the result of the pipeline, a set of (key, value) pairs
-    # TODO
-    raise NotImplementedError
+    rdd_pairs = rdd.map(lambda x: (x, x if random.random() < 0.5 else -x))
+
+    rdd_reduce = general_reduce(rdd_pairs, lambda x, y: x - y)
+    result = set(rdd_reduce.collect())
+    return result
 
 """
 15.
@@ -363,7 +452,9 @@ Does it exhibit nondeterministic behavior on different runs?
 including partitioning.
 
 === ANSWER Q15 BELOW ===
-
+Numbers look different every time, or atleast in a different 
+order every time, but I can't really tell because of how many
+pairs there are!
 === END OF Q15 ANSWER ===
 
 16.
@@ -374,19 +465,25 @@ Write three functions, a, b, and c that use different levels of parallelism.
 """
 
 def q16_a():
-    # For this one, create the RDD yourself. Choose the number of partitions.
-    # TODO
-    raise NotImplementedError
+    # 2 partitions
+    rdd = sc.parallelize(range(1, 1000001), 1)
+    rdd_pairs = rdd.map(lambda x: (x, x if random.random() < 0.5 else -x))
+    rdd_reduce = general_reduce(rdd_pairs, lambda x, y: x - y)
+    return set(rdd_reduce.collect())
 
 def q16_b():
-    # For this one, create the RDD yourself. Choose the number of partitions.
-    # TODO
-    raise NotImplementedError
+    # 8 partitions
+    rdd = sc.parallelize(range(1, 1000001), 12)
+    rdd_pairs = rdd.map(lambda x: (x, x if random.random() < 0.5 else -x))
+    rdd_reduce = general_reduce(rdd_pairs, lambda x, y: x - y)
+    return set(rdd_reduce.collect())
 
 def q16_c():
-    # For this one, create the RDD yourself. Choose the number of partitions.
-    # TODO
-    raise NotImplementedError
+    # 32 partitions
+    rdd = sc.parallelize(range(1, 1000001), 4)
+    rdd_pairs = rdd.map(lambda x: (x, x if random.random() < 0.5 else -x))
+    rdd_reduce = general_reduce(rdd_pairs, lambda x, y: x - y)
+    return set(rdd_reduce.collect())
 
 """
 Discussion questions
@@ -394,14 +491,15 @@ Discussion questions
 17. Was the answer different for the different levels of parallelism?
 
 === ANSWER Q17 BELOW ===
-
+Yes! 16c specifically was the most different.
 === END OF Q17 ANSWER ===
 
 18. Do you think this would be a serious problem if this occured on a real-world pipeline?
 Explain why or why not.
 
 === ANSWER Q18 BELOW ===
-
+Probably, if you were doing any sort of 
+transformations I could see this as an issue.
 === END OF Q18 ANSWER ===
 
 ===== Q19-20: Further reading =====
@@ -414,7 +512,12 @@ https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/icsecomp14se
 Take a look at the paper. What is one sentence you found interesting?
 
 === ANSWER Q19 BELOW ===
+"We find five bugs in well-tested production programs caused by noncommutative reducers. 
+Their root causes include wrong assumptions
+on implicit data properties, data corruption, and various semantic
+errors leading to non-commutativity."
 
+This is nuts!
 === END OF Q19 ANSWER ===
 
 20.
@@ -425,8 +528,16 @@ it possible to implement the example, and "False" if it was not.
 """
 
 def q20():
-    # TODO
-    raise NotImplementedError
+    # The FirstN pattern: collect the first N num of names, and join
+    rdd = sc.parallelize(range(1, 11))
+
+    rdd_pairs = rdd.map(lambda x: (1, str(x)))
+
+    result_rdd = general_reduce(rdd_pairs, lambda a, b: a + " " + b)
+    
+    result = result_rdd.collect()
+
+    return True if result else False
 
 """
 That's it for Part 1!
