@@ -1,0 +1,33 @@
+1. I'd expect throughput to honestly be quite high,
+because of the data parallelism. and partitions of data being
+processed across various cores at the same time should be quite fast.
+I'd also expect the same from latency but it being decreased by a lot.
+This is because there's a lot of parts in the dataflow graph where the data will be parallelized,
+so overall I'm expecting a largely decreased latency due to it. So overall, because of the individual 
+nodes all utilizing parallelism, there COULD be a change that there is a lot of partitions but too few CPUs,
+causing some increased latency or low throughput.
+
+2. For throughput, if we focus on the N=1_000_000 we can see
+that the throughput increases from ~25000 MS (1 partition) to ~35000 MS (2 partitions)
+but then plateaus at ~35000 MS (4 partitions), drastically decreasing to 25000 MS (8 partitions)
+and then finally 8000 MS (16 partitions)! We see the same trend when N=100_000 as well for
+throughput. Weirdly enough, for latency we see a completely different trend as latency is actually
+about the same across N (Ex: latency, 1 partition). But what's even weirder is that latency
+generally increases as partitions increases. Averaging around 6000 MS (1 partition), 9000 (2 partitions),
+and eventually 120_000 MS (16 partitions). So based on the dataflow graph, I was expecting latency to actually
+decrease, and throughput to plainly just increase, but I was wrong! What we're seeing is that latency is increasing
+and throughput increases but plateaus at a certain point due to core usage and sizes of partitions.
+
+3. I conjecture that due to the theoretical model's inability
+to take into account the number of rows we're processing, as well as the 
+computer's number of cores, it results in differences compared
+to our actual runtime's results. The overhead of so many partitions to be processed
+by our computer (especially when number of rows is high), results in waiting time as our
+cores aren't given the optimal number of rows in a partition to maximize its performance.
+This overhead at higher partition levels for throughput shows that we start to level out 
+our performance boost from parallelism and start to sacrifice throughput performance. We can also
+see that our data model doesn't take into account the increased latency that we start to see with this
+overhead, as our results for latency drastically differ from what we theorized. Specifically that the 
+theoretical model's latency was supposed to actually decrease due to the increase partitions to perform 
+data parallelism, but the opposite occurred as the increased partitions
+actually increased latency.

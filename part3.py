@@ -47,6 +47,147 @@ You should not modify the existing PART_1_PIPELINE.
 
 You may either delete the parts of the code that save the output file, or change these to a different output file like part1-answers-temp.txt.
 """
+import pyspark
+import time
+import os
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("DataflowGraphExample").getOrCreate()
+sc = spark.sparkContext
+
+def load_input(N=None, P=None):
+    if isinstance(N, list):
+        N = N[0]
+    if N is None:
+        N = 1000001
+    if P is None:
+        return sc.parallelize(range(1, N))
+    else:
+        return sc.parallelize(range(1, N), P)
+    
+def load_input_bigger(N=None, P=None):
+    # Return a parallelized RDD with the integers between 1 and 100,000,000
+    if N is None:
+        N = 100000001
+    
+    if P is None:
+        return sc.parallelize(range(1, N))
+    else:
+        # Use specified number of partitions
+        return sc.parallelize(range(1, N), P)
+    
+def q8_a(N=None, P=None):
+    rdd = load_input_bigger(N, P)
+    return q6(rdd)
+
+def q8_b(N=None, P=None):
+    rdd = load_input_bigger(N, P)
+    return q7(rdd)
+
+def q6(rdd):
+    # Input: the RDD from Q4
+    if rdd.isEmpty():
+        return (None, 0, None, 0)
+
+    # Convert to (key, value) pairs so general_map works
+    rdd_pairs = rdd.map(lambda x: (x, x))
+
+    # Map all numbers into single digits
+    digit_counts = general_map(rdd_pairs, lambda _, v: [(d, 1) for d in str(v)])
+
+    # Take totals for each digit
+    digit_totals = general_reduce(digit_counts, lambda a, b: a + b)
+
+    # To list
+    digit_totals_list = digit_totals.collect()
+
+    # Fetch most and least common
+    most_comb = max(digit_totals_list, key=lambda x: x[1])
+    least_comb = min(digit_totals_list, key=lambda x: x[1])
+
+    return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
+
+    # Output: a tuple (most common digit, most common frequency, least common digit, least common frequency)
+
+units = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+def under_thousand(num, units, teens, tens):
+    if num == 0:
+        return ""
+    words = []
+    if num >= 100:
+        hundreds = num // 100
+        if 1 <= hundreds < len(units):
+            words += [units[hundreds], "hundred"]
+        num %= 100
+        if num > 0:
+            words.append("and")
+    if num >= 20:
+        words.append(tens[num // 10])
+        num %= 10
+    if 10 <= num < 20:
+        words.append(teens[num - 10])
+    elif 0 < num < 10:
+        words.append(units[num])
+    return " ".join(filter(None, words))
+
+def number_to_english(n, units, teens, tens):
+    if n == 0:
+        return "zero"
+    if n == 1000000:
+        return "one million"
+    result = []
+    thousands = n // 1000
+    remainder = n % 1000
+    if thousands > 0:
+        result.append(under_thousand(thousands, units, teens, tens))
+        result.append("thousand")
+    if remainder > 0 or not result:
+        result.append(under_thousand(remainder, units, teens, tens))
+    return " ".join(result).strip()
+
+def q7(rdd):
+    # Input: the RDD from Q4
+    if rdd.isEmpty():
+        return (None, 0, None, 0)
+    
+    # Make into (key, value)
+    rdd_pairs = rdd.map(lambda x: (x, x))
+    
+    # Map all numbers into string form, and into indiv. chars
+    char_counts = general_map(rdd_pairs, lambda _, v: [(char, 1) for char in number_to_english(v, units, teens, tens) if char != " "])
+    
+    # Take totals for each char
+    char_totals = general_reduce(char_counts, lambda a, b: a + b)
+
+    # To list
+    char_totals_list = char_totals.collect()
+   
+    # Fetch most and least common
+    most_comb = max(char_totals_list, key=lambda x: x[1])
+    least_comb = min(char_totals_list, key=lambda x: x[1])
+    
+    return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
+
+    # Output: a tuple (most common char, most common frequency, least common char, least common frequency)
+
+def general_map(rdd, f):
+    """
+    rdd: an RDD with values of type (k1, v1)
+    f: a function (k1, v1) -> List[(k2, v2)]
+    output: an RDD with values of type (k2, v2)
+    """
+    return rdd.flatMap(lambda pair: f(pair[0], pair[1]))
+
+def general_reduce(rdd, f):
+    """
+    rdd: an RDD with values of type (k2, v2)
+    f: a function (v2, v2) -> v2
+    output: an RDD with values of type (k2, v2),
+        and just one single value per key
+    """
+    return rdd.reduceByKey(f)
 
 def PART_1_PIPELINE_PARAMETRIC(N, P):
     """
@@ -58,7 +199,13 @@ def PART_1_PIPELINE_PARAMETRIC(N, P):
     - load_input_bigger (including q8_a and q8_b) should use an input of size N.
     - both of these should return an RDD with level of parallelism P (number of partitions = P).
     """
-    raise NotImplementedError
+    rdd1 = load_input(N=N, P=P)
+    rdd2 = load_input_bigger(N=N, P=P)
+
+    result1 = q8_a(N=N,P=P)
+    result2 = q8_b(N=N,P=P)
+
+    return
 
 """
 === Coding part 2: measuring the throughput and latency ===
@@ -113,11 +260,110 @@ That is why we are assuming the latency will just be the running time of the ent
 
 - Set `NUM_RUNS` to `1` if you haven't already. Note that this will make the values for low numbers (like `N=1`, `N=10`, and `N=100`) vary quite unpredictably.
 """
+import matplotlib.pyplot as plt
 
 # Copy in ThroughputHelper and LatencyHelper
+NUM_RUNS=1
+class ThroughputHelper:
+    def __init__(self):
+        # Initialize the object.
+        # Pipelines: a list of functions, where each function
+        # can be run on no arguments.
+        # (like: def f(): ... )
+        self.pipelines = []
 
+        # Pipeline names
+        # A list of names for each pipeline
+        self.names = []
+
+        # Pipeline input sizes
+        self.sizes = []
+
+        # Pipeline throughputs
+        # This is set to None, but will be set to a list after throughputs
+        # are calculated.
+        self.throughputs = None
+
+    def add_pipeline(self, name, size, func):
+        self.names.append(name)
+        self.sizes.append(size)
+        self.pipelines.append(func)
+
+    def compare_throughput(self):
+        self.throughputs = []
+        # Measure the throughput of all pipelines
+        for i in range(0,len(self.pipelines)):
+            # Calculate total time
+            start_time = time.perf_counter()
+            N = self.sizes[i][0] if isinstance(self.sizes[i], list) else self.sizes[i]
+            for _ in range(NUM_RUNS):
+                self.pipelines[i](N)
+            end_time = time.perf_counter()
+            # Append to throughput
+            self.throughputs.append((NUM_RUNS * N) / (end_time - start_time))
+        print(f"self.throughputs: {self.throughputs}")
+        return self.throughputs
+
+    def generate_plot(self, filename):
+        # Generate a plot for throughput using matplotlib.
+        plt.figure(figsize=(10, 6))
+        plt.bar(self.names, self.throughputs, color='skyblue')
+        plt.xlabel('Pipelines')
+        plt.ylabel('Throughput (runs per second)')
+        plt.title('Throughput Comparison Across Pipelines')
+        plt.xticks(rotation=45, ha='right')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(filename)
+        plt.close()
+
+class LatencyHelper:
+    def __init__(self):
+        # Initialize the object.
+        # Pipelines: a list of functions, where each function
+        # can be run on no arguments.
+        # (like: def f(): ... )
+        self.pipelines = []
+
+        # Pipeline names
+        # A list of names for each pipeline
+        self.names = []
+
+        # Pipeline latencies
+        # This is set to None, but will be set to a list after latencies
+        # are calculated.
+        self.latencies = None
+
+    def add_pipeline(self, name, func):
+        self.names.append(name)
+        self.pipelines.append(func)
+
+    def compare_latency(self):
+        self.latencies = []
+        # Measure the latency of all pipelines
+        for i in range(0,len(self.pipelines)):
+            # Calculate total time
+            start_time = time.time()
+            for _ in range(NUM_RUNS):
+                self.pipelines[i](10)
+            end_time = time.time()
+            # Append to latency
+            self.latencies.append((end_time - start_time) * 1000)
+        return self.latencies
+
+    def generate_plot(self, filename):
+        # Generate a plot for throughput using matplotlib.
+        plt.figure(figsize=(10, 6))
+        plt.bar(self.names, self.latencies, color='skyblue')
+        plt.xlabel('Pipelines')
+        plt.ylabel('Latency (Ms)')
+        plt.title('Latency Comparison Across Pipelines')
+        plt.xticks(rotation=45, ha='right')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(filename)
+        plt.close()
 # Insert code to generate plots here as needed
-
 """
 === Reflection part ===
 
@@ -171,5 +417,28 @@ Please include specific numbers in your reflection (particularly for Q2).
 if __name__ == '__main__':
     print("Complete part 3. Please use the main function below to generate your plots so that they are regenerated whenever the code is run:")
 
-    print("[add code here]")
-    # TODO: add code here
+    # Input sizes and parallelism levels
+    input_sizes = [1, 10, 100, 1000, 10_000, 100_000, 1_000_000]
+    parallelisms = [1, 2, 4, 8, 16]
+
+    for P in parallelisms:
+        # Throughput measurement
+        th = ThroughputHelper()
+        for N in input_sizes:
+            th.add_pipeline(
+                name=f"N={N}",
+                size=[N],
+                func=lambda size, N=N, P=P: PART_1_PIPELINE_PARAMETRIC(N, P)
+            )
+        th.compare_throughput()
+        th.generate_plot(f"output/part3-throughput-{P}.png")
+
+        # Latency measurement
+        lat = LatencyHelper()
+        for N in input_sizes:
+            lat.add_pipeline(
+                name=f"N={N}",
+                func=lambda N=N, P=P: PART_1_PIPELINE_PARAMETRIC(N, P)
+            )
+        lat.compare_latency()
+        lat.generate_plot(f"output/part3-latency-{P}.png")
