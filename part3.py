@@ -63,7 +63,7 @@ import time
 import os
 from pyspark.sql import SparkSession
 
-from part1 import load_input, load_input_bigger, q8_a, q8_b
+from part1 import q1,q2,q4,q5,q6,q7,q8_a,q8_b,q11,q14,q16_a,q16_b,q16_c,q20, load_input, load_input_bigger
 
 def PART_1_PIPELINE_PARAMETRIC(N, P):
     """
@@ -75,12 +75,24 @@ def PART_1_PIPELINE_PARAMETRIC(N, P):
     - load_input_bigger (including q8_a and q8_b) should use an input of size N.
     - both of these should return an RDD with level of parallelism P (number of partitions = P).
     """
-    rdd1 = load_input(N=N, P=P)
-    rdd2 = load_input_bigger(N=N, P=P)
+    
+    # Load inputs with specified N and P
+    _ = q1()
+    _ = q2()
 
-    result1 = q8_a(N=N,P=P)
-    result2 = q8_b(N=N,P=P)
-
+    rdd = load_input(N,P)
+    q4_count = q4(rdd)
+    q5_avg = q5(rdd)
+    _,_,_,_ = q6(rdd)
+    _,_,_,_ = q7(rdd)
+    q8_a_result = q8_a(N,P)
+    q8_b_result = q8_b(N,P)
+    q11_result = q11(rdd)
+    q14_result = q14(rdd)
+    _ = q16_a()
+    _ = q16_b()
+    _ = q16_c()
+    _ = q20()
     return
 
 """
