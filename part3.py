@@ -47,147 +47,23 @@ You should not modify the existing PART_1_PIPELINE.
 
 You may either delete the parts of the code that save the output file, or change these to a different output file like part1-answers-temp.txt.
 """
+
+try:
+    # This should run on the driver (python3 part1.py, pytest, python3 part3.py)
+    spark = SparkSession.builder.appName("DataflowGraphExample").getOrCreate()
+    sc = spark.sparkContext
+except Exception as e:
+    # This path happens on workers when they import part1.
+    # We don’t want to create a SparkContext here.
+    spark = None
+    sc = None
+
 import pyspark
 import time
 import os
 from pyspark.sql import SparkSession
-spark = SparkSession.builder.appName("DataflowGraphExample").getOrCreate()
-sc = spark.sparkContext
 
-def load_input(N=None, P=None):
-    if isinstance(N, list):
-        N = N[0]
-    if N is None:
-        N = 1000001
-    if P is None:
-        return sc.parallelize(range(1, N))
-    else:
-        return sc.parallelize(range(1, N), P)
-    
-def load_input_bigger(N=None, P=None):
-    # Return a parallelized RDD with the integers between 1 and 100,000,000
-    if N is None:
-        N = 100000001
-    
-    if P is None:
-        return sc.parallelize(range(1, N))
-    else:
-        # Use specified number of partitions
-        return sc.parallelize(range(1, N), P)
-    
-def q8_a(N=None, P=None):
-    rdd = load_input_bigger(N, P)
-    return q6(rdd)
-
-def q8_b(N=None, P=None):
-    rdd = load_input_bigger(N, P)
-    return q7(rdd)
-
-def q6(rdd):
-    # Input: the RDD from Q4
-    if rdd.isEmpty():
-        return (None, 0, None, 0)
-
-    # Convert to (key, value) pairs so general_map works
-    rdd_pairs = rdd.map(lambda x: (x, x))
-
-    # Map all numbers into single digits
-    digit_counts = general_map(rdd_pairs, lambda _, v: [(d, 1) for d in str(v)])
-
-    # Take totals for each digit
-    digit_totals = general_reduce(digit_counts, lambda a, b: a + b)
-
-    # To list
-    digit_totals_list = digit_totals.collect()
-
-    # Fetch most and least common
-    most_comb = max(digit_totals_list, key=lambda x: x[1])
-    least_comb = min(digit_totals_list, key=lambda x: x[1])
-
-    return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
-
-    # Output: a tuple (most common digit, most common frequency, least common digit, least common frequency)
-
-units = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
-teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
-tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
-
-def under_thousand(num, units, teens, tens):
-    if num == 0:
-        return ""
-    words = []
-    if num >= 100:
-        hundreds = num // 100
-        if 1 <= hundreds < len(units):
-            words += [units[hundreds], "hundred"]
-        num %= 100
-        if num > 0:
-            words.append("and")
-    if num >= 20:
-        words.append(tens[num // 10])
-        num %= 10
-    if 10 <= num < 20:
-        words.append(teens[num - 10])
-    elif 0 < num < 10:
-        words.append(units[num])
-    return " ".join(filter(None, words))
-
-def number_to_english(n, units, teens, tens):
-    if n == 0:
-        return "zero"
-    if n == 1000000:
-        return "one million"
-    result = []
-    thousands = n // 1000
-    remainder = n % 1000
-    if thousands > 0:
-        result.append(under_thousand(thousands, units, teens, tens))
-        result.append("thousand")
-    if remainder > 0 or not result:
-        result.append(under_thousand(remainder, units, teens, tens))
-    return " ".join(result).strip()
-
-def q7(rdd):
-    # Input: the RDD from Q4
-    if rdd.isEmpty():
-        return (None, 0, None, 0)
-    
-    # Make into (key, value)
-    rdd_pairs = rdd.map(lambda x: (x, x))
-    
-    # Map all numbers into string form, and into indiv. chars
-    char_counts = general_map(rdd_pairs, lambda _, v: [(char, 1) for char in number_to_english(v, units, teens, tens) if char != " "])
-    
-    # Take totals for each char
-    char_totals = general_reduce(char_counts, lambda a, b: a + b)
-
-    # To list
-    char_totals_list = char_totals.collect()
-   
-    # Fetch most and least common
-    most_comb = max(char_totals_list, key=lambda x: x[1])
-    least_comb = min(char_totals_list, key=lambda x: x[1])
-    
-    return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
-
-    # Output: a tuple (most common char, most common frequency, least common char, least common frequency)
-
-def general_map(rdd, f):
-    """
-    rdd: an RDD with values of type (k1, v1)
-    f: a function (k1, v1) -> List[(k2, v2)]
-    output: an RDD with values of type (k2, v2)
-    """
-    return rdd.flatMap(lambda pair: f(pair[0], pair[1]))
-
-def general_reduce(rdd, f):
-    """
-    rdd: an RDD with values of type (k2, v2)
-    f: a function (v2, v2) -> v2
-    output: an RDD with values of type (k2, v2),
-        and just one single value per key
-    """
-    return rdd.reduceByKey(f)
+from part1 import load_input, load_input_bigger, q8_a, q8_b
 
 def PART_1_PIPELINE_PARAMETRIC(N, P):
     """

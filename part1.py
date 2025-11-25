@@ -28,8 +28,15 @@ If you aren't sure of the type of the output, please post a question on Piazza.
 # Spark boilerplate (remember to always add this at the top of any Spark file)
 import pyspark
 from pyspark.sql import SparkSession
-spark = SparkSession.builder.appName("DataflowGraphExample").getOrCreate()
-sc = spark.sparkContext
+try:
+    # This should run on the driver (python3 part1.py, pytest, python3 part3.py)
+    spark = SparkSession.builder.appName("DataflowGraphExample").getOrCreate()
+    sc = spark.sparkContext
+except Exception as e:
+    # This path happens on workers when they import part1.
+    # We don’t want to create a SparkContext here.
+    spark = None
+    sc = None
 
 # Additional imports
 import pytest
@@ -175,10 +182,15 @@ set of integers between 1 and 1 million (inclusive).
 4. First, we need a function that loads the input.
 """
 
-def load_input():
-
-    # Return a parallelized RDD with the integers between 1 and 1,000,000
-    return sc.parallelize(range(1, 1000001))
+def load_input(N=None, P=None):
+    if isinstance(N, list):
+        N = N[0]
+    if N is None:
+        N = 1000001
+    if P is None:
+        return sc.parallelize(range(1, N))
+    else:
+        return sc.parallelize(range(1, N), P)
 
 def q4(rdd):
     # Input: the RDD from load_input
@@ -225,9 +237,10 @@ def q6(rdd):
     digit_totals_list = digit_totals.collect()
 
     # Fetch most and least common
+    if not digit_totals_list:
+        return (None, 0, None, 0)
     most_comb = max(digit_totals_list, key=lambda x: x[1])
     least_comb = min(digit_totals_list, key=lambda x: x[1])
-
     return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
 
     # Output: a tuple (most common digit, most common frequency, least common digit, least common frequency)
@@ -319,11 +332,11 @@ def q7(rdd):
 
     # To list
     char_totals_list = char_totals.collect()
-   
+    if not char_totals_list:
+        return (None, 0, None, 0)
     # Fetch most and least common
     most_comb = max(char_totals_list, key=lambda x: x[1])
     least_comb = min(char_totals_list, key=lambda x: x[1])
-    
     return (most_comb[0], most_comb[1], least_comb[0], least_comb[1])
 
     # Output: a tuple (most common char, most common frequency, least common char, least common frequency)
@@ -335,16 +348,33 @@ Make a version of both pipelines from Q6 and Q7 for this case.
 You will need a new load_input function.
 """
 
-def load_input_bigger():
+def load_input(N=None, P=None):
+    if isinstance(N, list):
+        N = N[0]
+    if N is None:
+        N = 1000001
+    if P is None:
+        return sc.parallelize(range(1, N))
+    else:
+        return sc.parallelize(range(1, N), P)
+    
+def load_input_bigger(N=None, P=None):
     # Return a parallelized RDD with the integers between 1 and 100,000,000
-    return sc.parallelize(range(1, 100000001))
-
-def q8_a():
-    rdd = load_input_bigger()
+    if N is None:
+        N = 100000001
+    
+    if P is None:
+        return sc.parallelize(range(1, N))
+    else:
+        # Use specified number of partitions
+        return sc.parallelize(range(1, N), P)
+    
+def q8_a(N=None, P=None):
+    rdd = load_input_bigger(N, P)
     return q6(rdd)
 
-def q8_b():
-    rdd = load_input_bigger()
+def q8_b(N=None, P=None):
+    rdd = load_input_bigger(N, P)
     return q7(rdd)
 
 """
